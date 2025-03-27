@@ -1,20 +1,22 @@
 ﻿using Markdig;
 using System;
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Navigation;
-using MessageBox = System.Windows.MessageBox;
+using WebBrowser = System.Windows.Controls.WebBrowser;
 
 namespace MarkdownViewer
 {
     public partial class MainWindow : Window
     {
-        private System.Windows.Controls.WebBrowser _browser;
+        private WebBrowser _browser;
         private ScaleTransform _scaleTransform;
         private double _zoomFactor = 1.0;
+        private string _htmlTemplate;
 
         public MainWindow()
         {
@@ -24,7 +26,7 @@ namespace MarkdownViewer
             Title = "Markdown Viewer";
 
             // Create a WebBrowser control
-            _browser = new System.Windows.Controls.WebBrowser();
+            _browser = new WebBrowser();
 
             // Set up scaling transform for zooming
             _scaleTransform = new ScaleTransform(1, 1);
@@ -41,10 +43,47 @@ namespace MarkdownViewer
             printCommand.InputGestures.Add(new KeyGesture(Key.P, ModifierKeys.Control));
             CommandBindings.Add(new CommandBinding(printCommand, ExecutePrint));
 
+            // Load HTML template
+            LoadHtmlTemplate();
+
             // Load window position and size when the window is loaded
             Loaded += MainWindow_Loaded;
             // Save window position and size when the window is closing
             Closing += MainWindow_Closing;
+        }
+
+        private void LoadHtmlTemplate()
+        {
+            try
+            {
+                string templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "MarkdownTemplate.html");
+                if (File.Exists(templatePath))
+                {
+                    _htmlTemplate = File.ReadAllText(templatePath);
+                }
+                else
+                {
+                    // Fallback to embedded template if file doesn't exist
+                    using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MarkdownViewer.Resources.MarkdownTemplate.html");
+                    if (stream != null)
+                    {
+                        using var reader = new StreamReader(stream);
+                        _htmlTemplate = reader.ReadToEnd();
+                    }
+                    else
+                    {
+                        // If both fail, use a minimal template as fallback
+                        _htmlTemplate = "<!DOCTYPE html><html><head><style>body{font-family:sans-serif;}</style></head><body><!-- CONTENT_PLACEHOLDER --></body></html>";
+                        System.Windows.MessageBox.Show("Template file not found. Using minimal template.", "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show($"Error loading template: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                // Fallback to minimal template
+                _htmlTemplate = "<!DOCTYPE html><html><head><style>body{font-family:sans-serif;}</style></head><body><!-- CONTENT_PLACEHOLDER --></body></html>";
+            }
         }
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -121,6 +160,9 @@ namespace MarkdownViewer
                 {
                     string markdownText = File.ReadAllText(filePath);
 
+                    // Store the directory of the current file for resolving relative paths
+                    string currentDirectory = Path.GetDirectoryName(filePath);
+
                     // Configure Markdig pipeline with common extensions
                     var pipeline = new MarkdownPipelineBuilder()
                         .UseAdvancedExtensions()
@@ -128,147 +170,24 @@ namespace MarkdownViewer
 
                     string html = Markdown.ToHtml(markdownText, pipeline);
 
-                    // Create a complete HTML document with CSS for styling (dark mode)
-                    string htmlDocument = $@"
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <meta charset='utf-8'>
-                        <meta name='viewport' content='width=device-width, initial-scale=1'>
-                        <style>
-                            body {{ 
-                                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-                                line-height: 1.6;
-                                color: #e0e0e0;
-                                background-color: #121212;
-                                margin: 0 auto;
-                                padding: 20px;
-                            }}
-                            h1 {{ 
-                                font-size: 2em; 
-                                border-bottom: 1px solid #333; 
-                                padding-bottom: .3em; 
-                                color: #ffffff;
-                            }}
-                            h2 {{ 
-                                font-size: 1.5em; 
-                                border-bottom: 1px solid #333; 
-                                padding-bottom: .3em; 
-                                color: #ffffff;
-                            }}
-                            h3, h4, h5, h6 {{
-                                color: #ffffff;
-                            }}
-                            a {{
-                                color: #58a6ff;
-                                text-decoration: none;
-                            }}
-                            a:hover {{
-                                text-decoration: underline;
-                            }}
-                            pre {{ 
-                                background-color: #1e1e1e;
-                                border-radius: 3px;
-                                padding: 16px;
-                                overflow: auto;
-                                font-family: Consolas, Monaco, monospace;
-                                color: #d4d4d4;
-                                border: 1px solid #333;
-                            }}
-                            code {{
-                                font-family: Consolas, Monaco, monospace;
-                                background-color: #2d2d2d;
-                                padding: 0.2em 0.4em;
-                                border-radius: 3px;
-                                color: #d4d4d4;
-                            }}
-                            img {{ max-width: 100%; }}
-                            blockquote {{
-                                border-left: 4px solid #444;
-                                padding: 0 1em;
-                                color: #a0a0a0;
-                                margin: 0 0 16px;
-                                background-color: #1a1a1a;
-                                border-radius: 0 3px 3px 0;
-                            }}
-                            table {{
-                                border-collapse: collapse;
-                                width: 100%;
-                                margin-bottom: 16px;
-                            }}
-                            table, th, td {{
-                                border: 1px solid #333;
-                            }}
-                            th {{
-                                background-color: #252525;
-                                color: #ffffff;
-                                padding: 8px 13px;
-                            }}
-                            td {{
-                                padding: 6px 13px;
-                            }}
-                            tr:nth-child(even) {{
-                                background-color: #1a1a1a;
-                            }}
-                            hr {{
-                                border: 0;
-                                height: 1px;
-                                background-color: #333;
-                                margin: 24px 0;
-                            }}
-                            /* Adjust list styling */
-                            ul, ol {{
-                                color: #e0e0e0;
-                            }}
-                            /* Style for print - revert to light theme when printing */
-                            @media print {{
-                                body {{
-                                    color: #000;
-                                    background-color: #fff;
-                                }}
-                                pre, code {{
-                                    background-color: #f6f8fa;
-                                    color: #000;
-                                    border: 1px solid #ddd;
-                                }}
-                                h1, h2, h3, h4, h5, h6 {{
-                                    color: #000;
-                                }}
-                                blockquote {{
-                                    border-left: 4px solid #ddd;
-                                    color: #555;
-                                    background-color: #f8f8f8;
-                                }}
-                                table, th, td {{
-                                    border: 1px solid #ddd;
-                                }}
-                                th {{
-                                    background-color: #f2f2f2;
-                                    color: #000;
-                                }}
-                                a {{
-                                    color: #0366d6;
-                                }}
-                            }}
-                        </style>
-                    </head>
-                    <body>
-                        {html}
-                    </body>
-                    </html>";
+                    // Fix relative image paths
+                    html = FixRelativeImagePaths(html, currentDirectory);
+
+                    // Replace content placeholder with generated HTML
+                    string htmlDocument = _htmlTemplate.Replace("<!-- CONTENT_PLACEHOLDER -->", html);
 
                     _browser.NavigateToString(htmlDocument);
                     Title = $"Markdown Viewer - {Path.GetFileName(filePath)}";
                 }
                 else
                 {
-                    MessageBox.Show($"File not found: {filePath}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    System.Windows.MessageBox.Show($"File not found: {filePath}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     Close();
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error loading file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                System.Windows.MessageBox.Show($"Error loading file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 Close();
             }
         }
@@ -304,8 +223,54 @@ namespace MarkdownViewer
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error printing: {ex.Message}", "Print Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                System.Windows.MessageBox.Show($"Error printing: {ex.Message}", "Print Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private string FixRelativeImagePaths(string html, string baseDirectory)
+        {
+            // This regex looks for <img> tags with src attributes
+            var imgRegex = new System.Text.RegularExpressions.Regex(
+                @"<img[^>]*src\s*=\s*[""']([^""']+)[""'][^>]*>",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            return imgRegex.Replace(html, match =>
+            {
+                string originalTag = match.Value;
+                string src = match.Groups[1].Value;
+
+                // Skip URLs that are already absolute
+                if (src.StartsWith("http://") ||
+                    src.StartsWith("https://") ||
+                    src.StartsWith("file://") ||
+                    src.StartsWith("data:") ||
+                    src.StartsWith("about:") ||
+                    src.StartsWith("/"))
+                {
+                    return originalTag;
+                }
+
+                try
+                {
+                    // Convert the relative path to absolute
+                    string absolutePath = Path.Combine(baseDirectory, src);
+
+                    // Ensure the file exists
+                    if (File.Exists(absolutePath))
+                    {
+                        // Replace the src with a file:// URL
+                        string fileUrl = "file:///" + absolutePath.Replace('\\', '/');
+                        string newTag = originalTag.Replace(src, fileUrl);
+                        return newTag;
+                    }
+                }
+                catch
+                {
+                    // If anything goes wrong, return the original tag
+                }
+
+                return originalTag;
+            });
         }
     }
 }
