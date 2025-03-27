@@ -2,6 +2,8 @@
 
 A lightweight, dark-themed Markdown viewer for Windows, built with WPF and .NET 8.0. This application is designed to be used via Windows File Explorer file associations, allowing you to quickly preview Markdown files with a simple double-click.
 
+![Markdown Viewer screenshot](screenshot.png)
+
 ## Features
 
 - Dark theme with code syntax highlighting
@@ -57,4 +59,4 @@ MarkdownViewer.exe path\to\your\file.md
 
 ## License
 
-MIT License
+[MIT License](LICENSE.md)
